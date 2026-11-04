@@ -30,7 +30,7 @@ input[type=range]{width:100%}
 .row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1 1 140px}
 .stage{position:relative;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
 .stage video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
-#cam{position:absolute;width:24%;aspect-ratio:16/9;object-fit:cover!important;border-radius:10px;border:2px solid var(--acc);display:none}
+#cam{position:absolute;right:2%;bottom:3%;width:24%;height:24%;object-fit:cover!important;border-radius:10px;border:2px solid var(--acc);display:none}
 .st{font-size:.85rem;color:var(--mute);margin-top:8px}.st b{color:var(--acc)}
 .err{color:var(--bad)}
 .hide{display:none}
@@ -54,8 +54,9 @@ input[type=range]{width:100%}
   </div>
 
   <div class="stage"><video id="main" autoplay playsinline muted></video><video id="cam" autoplay playsinline muted></video></div>
-  <div class="row" style="margin-top:8px"><button id="fs">Full screen</button><select id="corner" aria-label="Camera corner"><option value="br">Camera: bottom right</option><option value="bl">Camera: bottom left</option><option value="tr">Camera: top right</option><option value="tl">Camera: top left</option></select></div>
-  <label for="size">Camera size</label><input id="size" type="range" min="14" max="40" value="24">
+  <div class="row" style="margin-top:8px"><button id="fs">Full screen</button><button id="spk">Fix sound to speaker</button></div>
+  <label for="sx">Camera width (x)</label><input id="sx" type="range" min="10" max="60" value="24">
+  <label for="sy">Camera height (y)</label><input id="sy" type="range" min="10" max="60" value="24">
 
   <div class="panel" style="margin-top:14px">
     <h2>2. Connect the phone</h2>
@@ -98,9 +99,14 @@ const say=(id,t,e)=>{$(id).innerHTML=e?'<span class="err">'+t+'</span>':t};
 const tabs=p=>{$('recv').classList.toggle('hide',p);$('phone').classList.toggle('hide',!p);$('tR').classList.toggle('on',!p);$('tP').classList.toggle('on',p)};
 $('tR').onclick=()=>tabs(false);$('tP').onclick=()=>tabs(true);
 
+function speaker(){
+  try{if(navigator.audioSession)navigator.audioSession.type='playback'}catch(e){}
+  try{if(ctx&&ctx.setSinkId)ctx.setSinkId('')}catch(e){}
+}
 function audio(){
   if(!ctx){ctx=new (window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.connect(ctx.destination)}
   if(ctx.state!=='running')ctx.resume();
+  speaker();
 }
 function lane(stream,gainEl,meterEl){
   audio();
@@ -126,19 +132,20 @@ $('start').onclick=async()=>{
   try{
     if(capStream)capStream.getTracks().forEach(x=>x.stop());
     const sameDev=$('vsel').value&&$('asel').value;
-    capStream=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:$('vsel').value},width:{ideal:1920},height:{ideal:1080}},audio:{deviceId:{exact:$('asel').value},echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    capStream=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:$('vsel').value},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60}},audio:{deviceId:{exact:$('asel').value},echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     $('main').srcObject=new MediaStream(capStream.getVideoTracks());
     if(capStream.getAudioTracks().length)lane(new MediaStream(capStream.getAudioTracks()),$('gA'),$('mA'));
+    speaker();setTimeout(speaker,500);setTimeout(speaker,2000);
     say('s1','<b>Capture running.</b> If the game sound is silent, pick the capture card under Game audio and start again.');
   }catch(e){say('s1','Could not start: '+e.message,1)}
 };
 
 function place(){
-  const c=$('cam'),k=$('corner').value,s=$('size').value;
-  c.style.width=s+'%';c.style.top=c.style.bottom=c.style.left=c.style.right='auto';
-  c.style[k[0]=='t'?'top':'bottom']='3%';c.style[k[1]=='l'?'left':'right']='2%';
+  const c=$('cam');
+  c.style.width=$('sx').value+'%';c.style.height=$('sy').value+'%';
 }
-$('corner').onchange=$('size').oninput=place;place();
+$('sx').oninput=$('sy').oninput=place;place();
+$('spk').onclick=()=>{audio();speaker();if(ctx)ctx.resume();say('s1','Asked iPad to play through the speaker. Also check Control Center and pick iPad Speakers.')};
 $('fs').onclick=()=>{const s=document.querySelector('.stage');(s.requestFullscreen||s.webkitRequestFullscreen||(()=>{})).call(s)};
 
 const ice=p=>new Promise(r=>{if(p.iceGatheringState==='complete')return r();p.onicegatheringstatechange=()=>p.iceGatheringState==='complete'&&r();setTimeout(r,3500)});
